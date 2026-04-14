@@ -1,0 +1,13 @@
+{
+  "wifi": {
+    "ssid": "VEHICLE-AP",
+    "password": "your-password-here"
+  },
+  "endpoint": "http://example.com/api/data",
+  "api_key": "your-api-key-here",
+  "mock": {
+    "gps": false,
+    "imu": true,
+    "sender": true
+  }
+}

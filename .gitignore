@@ -1,0 +1,17 @@
+# Build artifacts
+build/
+.pio/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Credentials (TF card config contains Wi-Fi passwords)
+sdcard/config.json
+
+# Claude Code
+.claude/
