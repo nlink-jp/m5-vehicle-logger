@@ -1,7 +1,7 @@
-// display_manager.h — M5Stack LCD status display
+// display_manager.h — M5Stack LCD status display (double-buffered via M5Canvas)
 #pragma once
 
-#include <M5Stack.h>
+#include <M5Unified.h>
 #include "types.h"
 #include "data_buffer.h"
 #include "network_manager.h"
@@ -18,16 +18,18 @@ struct SensorStats {
 
 class DisplayManager {
 public:
-  DisplayManager() : _lastUpdateMs(0) {
+  DisplayManager() : _canvas(&M5.Display), _lastUpdateMs(0) {
     memset(&stats, 0, sizeof(stats));
   }
 
   SensorStats stats;
 
   void begin() {
-    M5.Lcd.setTextSize(1);
-    M5.Lcd.fillScreen(BLACK);
+    _canvas.createSprite(320, 240);
+    _canvas.setTextSize(2);
+    _canvas.fillSprite(BLACK);
     _drawHeader();
+    _canvas.pushSprite(0, 0);
   }
 
   void update(const GPSData& gps, const DataBuffer& buffer,
@@ -36,116 +38,127 @@ public:
     if (now - _lastUpdateMs < DISPLAY_UPDATE_INTERVAL_MS) return;
     _lastUpdateMs = now;
 
-    int y = 26;
+    // Draw everything to off-screen canvas
+    _canvas.fillSprite(BLACK);
+    _drawHeader();
+
+    int y = 28;
     int lineH = 18;
-    M5.Lcd.setTextSize(2);
-    M5.Lcd.fillRect(0, y, 320, 240 - y, BLACK);
+    _canvas.setTextSize(2);
 
     // ── GPS ──
     _sectionLabel(y, "GPS");
     y += lineH;
-    M5.Lcd.setCursor(5, y);
     if (gps.valid) {
       _statusDot(y, GREEN);
-      M5.Lcd.setTextColor(WHITE, BLACK);
-      M5.Lcd.printf(" %d sat  %.1f km/h", gps.satellites, gps.speed);
+      _canvas.setCursor(20, y);
+      _canvas.setTextColor(WHITE, BLACK);
+      _canvas.printf("%d sat  %.1f km/h", gps.satellites, gps.speed);
       y += lineH;
-      M5.Lcd.setCursor(5, y);
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.printf("  %.6f, %.6f  alt:%.0fm", gps.latitude, gps.longitude, gps.altitude);
-      M5.Lcd.setTextSize(2);
+      _canvas.setCursor(20, y);
+      _canvas.setTextSize(1);
+      _canvas.printf("%.6f, %.6f  alt:%.0fm", gps.latitude, gps.longitude, gps.altitude);
+      _canvas.setTextSize(2);
     } else {
       _statusDot(y, RED);
-      M5.Lcd.setTextColor(DARKGREY, BLACK);
-      M5.Lcd.print(" no fix");
+      _canvas.setCursor(20, y);
+      _canvas.setTextColor(DARKGREY, BLACK);
+      _canvas.print("no fix");
     }
 
     // ── IMU ──
     y += lineH + 4;
     _sectionLabel(y, "IMU");
     y += lineH;
-    M5.Lcd.setCursor(5, y);
     if (stats.imuReadCount > 0) {
       _statusDot(y, GREEN);
-      M5.Lcd.setTextColor(WHITE, BLACK);
-      M5.Lcd.printf(" %d/s  total:%lu", stats.lastIMUSamples, stats.imuReadCount);
+      _canvas.setCursor(20, y);
+      _canvas.setTextColor(WHITE, BLACK);
+      _canvas.printf("%d/s  total:%lu", stats.lastIMUSamples, stats.imuReadCount);
     } else {
       _statusDot(y, DARKGREY);
-      M5.Lcd.setTextColor(DARKGREY, BLACK);
-      M5.Lcd.print(" waiting...");
+      _canvas.setCursor(20, y);
+      _canvas.setTextColor(DARKGREY, BLACK);
+      _canvas.print("waiting...");
     }
 
     // ── Network ──
     y += lineH + 4;
     _sectionLabel(y, "NET");
     y += lineH;
-    M5.Lcd.setCursor(5, y);
     if (network.isConnected()) {
       _statusDot(y, GREEN);
-      M5.Lcd.setTextColor(WHITE, BLACK);
-      M5.Lcd.printf(" %s", network.ssid());
+      _canvas.setCursor(20, y);
+      _canvas.setTextColor(WHITE, BLACK);
+      _canvas.printf("%s", network.ssid());
     } else {
       _statusDot(y, RED);
-      M5.Lcd.setTextColor(DARKGREY, BLACK);
-      M5.Lcd.print(" disconnected");
+      _canvas.setCursor(20, y);
+      _canvas.setTextColor(DARKGREY, BLACK);
+      _canvas.print("disconnected");
     }
 
     // Send stats
     y += lineH;
-    M5.Lcd.setCursor(5, y);
-    M5.Lcd.setTextColor(WHITE, BLACK);
-    M5.Lcd.printf("  TX ok:%lu fail:%lu", stats.sendSuccessCount, stats.sendFailCount);
+    _canvas.setCursor(20, y);
+    _canvas.setTextColor(WHITE, BLACK);
+    _canvas.printf("TX ok:%lu fail:%lu", stats.sendSuccessCount, stats.sendFailCount);
 
     // ── Buffer ──
     y += lineH + 4;
     _sectionLabel(y, "BUF");
     y += lineH;
-    M5.Lcd.setCursor(5, y);
+    _canvas.setCursor(5, y);
+    _canvas.setTextColor(WHITE, BLACK);
+    _canvas.printf("%3d/%d ", buffer.count(), buffer.capacity());
     // Bar graph
-    int barW = 200;
+    int barX = 100;
+    int barW = 210;
     int barH = 14;
-    int barX = 80;
     float fillRatio = (float)buffer.count() / buffer.capacity();
     uint16_t barColor = fillRatio > 0.9 ? RED : fillRatio > 0.7 ? YELLOW : GREEN;
-    M5.Lcd.drawRect(barX, y, barW, barH, WHITE);
-    M5.Lcd.fillRect(barX + 1, y + 1, (int)((barW - 2) * fillRatio), barH - 2, barColor);
-    M5.Lcd.setTextColor(WHITE, BLACK);
-    M5.Lcd.printf("%3d/%d", buffer.count(), buffer.capacity());
+    _canvas.drawRect(barX, y, barW, barH, WHITE);
+    int fillW = (int)((barW - 2) * fillRatio);
+    if (fillW > 0) {
+      _canvas.fillRect(barX + 1, y + 1, fillW, barH - 2, barColor);
+    }
 
     // ── Footer: uptime ──
-    y = 240 - lineH - 2;
-    M5.Lcd.setCursor(5, y);
+    y = 240 - 14;
+    _canvas.setCursor(5, y);
     unsigned long sec = now / 1000;
-    M5.Lcd.setTextSize(1);
-    M5.Lcd.setTextColor(DARKGREY, BLACK);
-    M5.Lcd.printf("uptime %02lu:%02lu:%02lu  gps_rx:%lu",
+    _canvas.setTextSize(1);
+    _canvas.setTextColor(DARKGREY, BLACK);
+    _canvas.printf("uptime %02lu:%02lu:%02lu  gps_rx:%lu",
                    sec / 3600, (sec / 60) % 60, sec % 60, stats.gpsReadCount);
-    M5.Lcd.setTextSize(2);
+
+    // Push entire frame to LCD at once — no flicker
+    _canvas.pushSprite(0, 0);
   }
 
 private:
+  M5Canvas _canvas;
+  unsigned long _lastUpdateMs;
+
   void _drawHeader() {
-    M5.Lcd.fillRect(0, 0, 320, 24, NAVY);
-    M5.Lcd.setTextSize(2);
-    M5.Lcd.setCursor(5, 4);
-    M5.Lcd.setTextColor(WHITE, NAVY);
-    M5.Lcd.print("Vehicle Logger");
+    _canvas.fillRect(0, 0, 320, 24, NAVY);
+    _canvas.setTextSize(2);
+    _canvas.setCursor(5, 4);
+    _canvas.setTextColor(WHITE, NAVY);
+    _canvas.print("Vehicle Logger");
   }
 
   void _sectionLabel(int y, const char* label) {
-    M5.Lcd.setCursor(5, y);
-    M5.Lcd.setTextColor(CYAN, BLACK);
-    M5.Lcd.setTextSize(1);
-    M5.Lcd.printf("--- %s ", label);
-    // Draw line
-    int cursorX = M5.Lcd.getCursorX();
-    M5.Lcd.drawFastHLine(cursorX, y + 4, 320 - cursorX - 5, CYAN);
-    M5.Lcd.setTextSize(2);
+    _canvas.setTextSize(1);
+    _canvas.setCursor(5, y);
+    _canvas.setTextColor(CYAN, BLACK);
+    _canvas.printf("--- %s ", label);
+    int cursorX = _canvas.getCursorX();
+    _canvas.drawFastHLine(cursorX, y + 4, 320 - cursorX - 5, CYAN);
+    _canvas.setTextSize(2);
   }
 
   void _statusDot(int y, uint16_t color) {
-    M5.Lcd.fillCircle(10, y + 7, 5, color);
+    _canvas.fillCircle(10, y + 7, 5, color);
   }
-
-  unsigned long _lastUpdateMs;
 };

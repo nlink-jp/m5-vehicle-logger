@@ -11,16 +11,25 @@ public:
   virtual bool read(IMUData& out) = 0;  // true if data available
 };
 
-// --- MPU6886 implementation (placeholder for real hardware) ---
-// Uncomment and implement when IMU hardware is available:
+// --- M5Unified IMU implementation (placeholder for real hardware) ---
+// Uncomment when IMU hardware is available:
 //
-// #include <M5Stack.h>
-// class MPU6886Provider : public IMUProvider {
+// #include <M5Unified.h>
+// class M5IMUProvider : public IMUProvider {
 // public:
-//   void begin() override { M5.IMU.Init(); }
+//   void begin() override {
+//     // M5Unified auto-detects and initializes IMU in M5.begin()
+//     Serial.println("[IMU] M5Unified IMU initialized");
+//   }
 //   bool read(IMUData& out) override {
-//     M5.IMU.getAccelData(&out.ax, &out.ay, &out.az);
-//     M5.IMU.getGyroData(&out.gx, &out.gy, &out.gz);
+//     auto data = M5.Imu.getImuData();
+//     out.ax = data.accel.x;
+//     out.ay = data.accel.y;
+//     out.az = data.accel.z;
+//     out.gx = data.gyro.x;
+//     out.gy = data.gyro.y;
+//     out.gz = data.gyro.z;
+//     out.offsetMs = 0;  // caller sets this
 //     return true;
 //   }
 // };

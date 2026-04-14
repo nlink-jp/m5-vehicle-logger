@@ -4,7 +4,7 @@
 // and sends via Wi-Fi when connected. All sensor and network
 // modules are interface-based for easy swapping.
 
-#include <M5Stack.h>
+#include <M5Unified.h>
 #include "config.h"
 #include "types.h"
 #include "config_manager.h"
@@ -35,8 +35,8 @@ unsigned long lastSendMs = 0;
 uint8_t imuSampleIndex = 0;
 
 void setup() {
-  M5.begin(true, true, true, false); // LCD, SD, Serial, I2C
-  Serial.begin(115200);
+  auto cfg = M5.config();
+  M5.begin(cfg);
   Serial.println("=== M5 Vehicle Logger ===");
 
   // 1. Load config from TF card

@@ -27,11 +27,7 @@ public:
     strncpy(cfg.endpoint, "http://example.com/api/data", sizeof(cfg.endpoint) - 1);
     cfg.apiKey[0] = '\0';
 
-    if (!SD.begin()) {
-      Serial.println("[Config] TF card not found, using defaults");
-      return false;
-    }
-
+    // SD is already initialized by M5.begin() in M5Unified
     File file = SD.open(CONFIG_FILE_PATH, FILE_READ);
     if (!file) {
       Serial.printf("[Config] %s not found, using defaults\n", CONFIG_FILE_PATH);
