@@ -2,10 +2,12 @@
 #pragma once
 
 // --- Pin assignments (M5Stack Basic v2.7 + GPS Module v2.1) ---
-#define GPS_TX_PIN 17
+// DIP switch: GPS TXD=G17, GPS RXD=G16
+// ESP32 Serial2: RX pin reads GPS TXD, TX pin writes GPS RXD
 #define GPS_RX_PIN 16
+#define GPS_TX_PIN 17
 #define GPS_PPS_PIN 36
-#define GPS_BAUD 9600
+#define GPS_BAUD 115200
 
 // --- Sampling rates ---
 #define GPS_SAMPLE_INTERVAL_MS 1000   // 1 Hz

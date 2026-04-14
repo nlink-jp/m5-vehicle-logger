@@ -28,7 +28,7 @@ DisplayManager display;
 
 // Current epoch state
 SensorRecord currentRecord;
-GPSData lastGPSData; // retain last valid GPS for display between epochs
+GPSData lastGPSData;
 unsigned long lastGPSMs = 0;
 unsigned long lastIMUMs = 0;
 unsigned long lastSendMs = 0;
@@ -49,26 +49,24 @@ void setup() {
     gps = new TinyGPSProvider(Serial2, GPS_TX_PIN, GPS_RX_PIN, GPS_BAUD);
   }
   gps->begin();
-  Serial.printf("[Main] GPS: %s\n", rtConfig.useMockGPS ? "mock" : "TinyGPS++");
+  Serial.printf("[Main] GPS: %s\n", rtConfig.useMockGPS ? "mock" : "AT6668");
 
   // 3. Initialize IMU provider
   if (rtConfig.useMockIMU) {
     imu = new MockIMUProvider();
   } else {
-    // When real IMU is available:
-    // imu = new MPU6886Provider();
-    imu = new MockIMUProvider(); // fallback
+    // imu = new M5IMUProvider();
+    imu = new MockIMUProvider();
   }
   imu->begin();
-  Serial.printf("[Main] IMU: %s\n", rtConfig.useMockIMU ? "mock" : "MPU6886");
+  Serial.printf("[Main] IMU: %s\n", rtConfig.useMockIMU ? "mock" : "M5Unified");
 
   // 4. Initialize network
   if (rtConfig.useMockSender) {
     sender = new MockSender(rtConfig.endpoint, rtConfig.apiKey);
   } else {
-    // When cloud is ready:
     // sender = new HTTPSender(rtConfig.endpoint, rtConfig.apiKey);
-    sender = new MockSender(rtConfig.endpoint, rtConfig.apiKey); // fallback
+    sender = new MockSender(rtConfig.endpoint, rtConfig.apiKey);
   }
   network.setSender(sender);
   network.begin(rtConfig.wifiSSID, rtConfig.wifiPassword);
@@ -115,7 +113,6 @@ void loop() {
   if (now - lastGPSMs >= GPS_SAMPLE_INTERVAL_MS) {
     lastGPSMs = now;
 
-    // Read GPS
     GPSData gpsData;
     memset(&gpsData, 0, sizeof(gpsData));
     if (gps && gps->read(gpsData)) {
@@ -123,15 +120,12 @@ void loop() {
     }
     currentRecord.gps = gpsData;
     currentRecord.epochMs = now;
-    lastGPSData = gpsData; // keep for display
+    lastGPSData = gpsData;
 
-    // Track IMU samples per epoch for display
     display.stats.lastIMUSamples = imuSampleIndex;
 
-    // Push completed record to buffer
     dataBuffer.push(currentRecord);
 
-    // Reset epoch for next second
     memset(&currentRecord, 0, sizeof(currentRecord));
     imuSampleIndex = 0;
   }
@@ -140,7 +134,6 @@ void loop() {
   network.update();
 
   if (network.isConnected() && !dataBuffer.isEmpty()) {
-    // Send in batches, throttled to 1 send/sec
     if (now - lastSendMs >= 1000) {
       lastSendMs = now;
       SensorRecord batch[SEND_BATCH_SIZE];
@@ -150,11 +143,9 @@ void loop() {
           display.stats.sendSuccessCount++;
         } else {
           display.stats.sendFailCount++;
-          // Send failed — push records back (best effort)
           for (int i = 0; i < count; i++) {
             dataBuffer.push(batch[i]);
           }
-          Serial.println("[Main] send failed, re-queued");
         }
       }
     }
@@ -163,6 +154,5 @@ void loop() {
   // --- Display update ---
   display.update(lastGPSData, dataBuffer, network);
 
-  // Small yield to prevent watchdog timeout
   delay(1);
 }
