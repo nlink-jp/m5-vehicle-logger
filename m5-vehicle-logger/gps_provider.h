@@ -54,10 +54,11 @@ public:
     unsigned long now = millis();
     if (now - _lastDiagMs >= 5000) {
       _lastDiagMs = now;
-      Serial.printf("[GPS] chars=%lu sentences=%lu failed=%lu sat=%d fix=%d\n",
+      Serial.printf("[GPS] chars=%lu ok=%lu fail=%lu fixSat=%d inView=%d fix=%d\n",
                     _gps.charsProcessed(), _gps.sentencesWithFix(),
                     _gps.failedChecksum(),
                     _gps.satellites.isValid() ? _gps.satellites.value() : -1,
+                    satellitesInView(),
                     _gps.location.isValid() ? 1 : 0);
     }
   }
@@ -65,9 +66,11 @@ public:
   bool read(GPSData& out) override {
     update();
 
-    // Always populate what we have, even without a position fix.
-    // This lets the display show satellite count during acquisition.
-    out.satellites = _gps.satellites.isValid() ? _gps.satellites.value() : 0;
+    // Show satellites: fix count from GGA, or in-view count from GSV
+    uint8_t fixSats = _gps.satellites.isValid() ? _gps.satellites.value() : 0;
+    uint8_t inView = satellitesInView();
+    // Prefer in-view during acquisition (shows progress), fix count when locked
+    out.satellites = fixSats > 0 ? fixSats : inView;
     out.valid = _gps.location.isValid();
     out.latitude = _gps.location.isValid() ? _gps.location.lat() : 0.0;
     out.longitude = _gps.location.isValid() ? _gps.location.lng() : 0.0;
@@ -88,11 +91,23 @@ public:
     return _gps.charsProcessed() > 0;
   }
 
+  uint8_t satellitesInView() {
+    const char* gp = _satInView.value();
+    const char* gn = _satInViewGN.value();
+    int v = atoi(gp);
+    int v2 = atoi(gn);
+    return (uint8_t)(v > v2 ? v : v2);
+  }
+
 private:
   HardwareSerial& _serial;
   int _txPin, _rxPin;
   unsigned long _baud;
   TinyGPSPlus _gps;
+  // Custom: GPGSV sentence, field 3 = total satellites in view
+  TinyGPSCustom _satInView{_gps, "GPGSV", 3};
+  // Also try GNGSV (multi-constellation)
+  TinyGPSCustom _satInViewGN{_gps, "GNGSV", 3};
   unsigned long _lastDiagMs = 0;
 };
 

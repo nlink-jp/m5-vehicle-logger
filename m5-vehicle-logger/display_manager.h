@@ -56,7 +56,12 @@ public:
     if (gps.valid) {
       snprintf(line, sizeof(line), "%d sat  %5.1f km/h    ", gps.satellites, gps.speed);
     } else {
-      snprintf(line, sizeof(line), "no fix              ");
+      // Show satellite count even without fix
+      if (gps.satellites > 0) {
+        snprintf(line, sizeof(line), "no fix  %d sat       ", gps.satellites);
+      } else {
+        snprintf(line, sizeof(line), "no fix  searching... ");
+      }
     }
     M5.Display.print(line);
 
@@ -67,7 +72,7 @@ public:
     if (gps.valid) {
       snprintf(line, sizeof(line), "%.6f, %.6f  alt:%.0fm       ", gps.latitude, gps.longitude, gps.altitude);
     } else {
-      snprintf(line, sizeof(line), "waiting for satellites...              ");
+      snprintf(line, sizeof(line), "acquiring signal...                    ");
     }
     M5.Display.print(line);
 
