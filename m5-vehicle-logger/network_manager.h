@@ -61,9 +61,9 @@ private:
 // };
 
 // --- Wi-Fi connection manager with exponential backoff ---
-class NetworkManager {
+class WifiManager {
 public:
-  NetworkManager() : _sender(nullptr), _connected(false),
+  WifiManager() : _sender(nullptr), _connected(false),
                      _retryMs(WIFI_RETRY_BASE_MS), _lastAttemptMs(0) {}
 
   void setSender(DataSender* sender) { _sender = sender; }

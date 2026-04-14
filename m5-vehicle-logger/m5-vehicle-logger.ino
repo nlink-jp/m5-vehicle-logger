@@ -23,7 +23,7 @@ IMUProvider* imu = nullptr;
 DataSender* sender = nullptr;
 
 DataBuffer dataBuffer;
-NetworkManager network;
+WifiManager network;
 DisplayManager display;
 
 // Current epoch state

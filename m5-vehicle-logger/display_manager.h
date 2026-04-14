@@ -33,7 +33,7 @@ public:
   }
 
   void update(const GPSData& gps, const DataBuffer& buffer,
-              const NetworkManager& network) {
+              const WifiManager& network) {
     unsigned long now = millis();
     if (now - _lastUpdateMs < DISPLAY_UPDATE_INTERVAL_MS) return;
     _lastUpdateMs = now;
