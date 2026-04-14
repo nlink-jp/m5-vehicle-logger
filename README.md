@@ -8,9 +8,12 @@ vehicle-mounted operation without battery backup.
 
 ## Hardware
 
-- **M5Stack Basic v2.7** (ESP32, LCD, TF card slot)
-- **M5 GPS Module v2.1** — TXD: G17, RXD: G16, PPS: G36
+- **M5Stack Basic v2.7** (ESP32, LCD, TF card slot, no PSRAM)
+- **M5 GPS Module v2.1** — AT6668 chip, **115200 baud**, TXD: G17, RXD: G16, PPS: G36
 - **IMU** — MPU6886 or compatible (not yet connected; mock available)
+- **External SMA antenna** — required for GPS reception
+
+See [Hardware Notes](docs/en/hardware-notes.md) for detailed setup, gotchas, and troubleshooting.
 
 ## Features
 

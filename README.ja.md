@@ -6,9 +6,12 @@ GPS位置情報（1Hz）とIMU加速度/ジャイロデータ（10Hz）を収集
 
 ## ハードウェア
 
-- **M5Stack Basic v2.7**（ESP32、LCD、TFカードスロット）
-- **M5 GPS Module v2.1** — TXD: G17, RXD: G16, PPS: G36
+- **M5Stack Basic v2.7**（ESP32、LCD、TFカードスロット、PSRAM非搭載）
+- **M5 GPS Module v2.1** — AT6668チップ、**115200 baud**、TXD: G17, RXD: G16, PPS: G36
 - **IMU** — MPU6886 または互換品（未接続、モック利用可）
+- **外部SMAアンテナ** — GPS受信に必須
+
+詳細なセットアップ、注意点、トラブルシューティングは[ハードウェアノート](docs/ja/hardware-notes.ja.md)を参照。
 
 ## 機能
 
