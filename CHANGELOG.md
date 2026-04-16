@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-04-17
+
+### Added
+
+- Automatic gravity compensation with startup calibration (3-second static average)
+- GravityCompensator: removes gravity vector and rotates to vehicle coordinate frame
+- VehicleAccel struct for gravity-compensated forward/lateral/vertical G values
+- Complementary filter for continuous gravity tracking (handles drift/bumps)
+- Dashboard: vehicle G display row (F/L/U) with calibration status indicator
+- Motion page: radar chart and current dot now use compensated vehicle G
+- Trend page: first graph shows compensated vehicle G instead of raw accel
+
+### Changed
+
+- Forward axis reference: sensor Z (display normal) instead of sensor X
+- Lateral axis: fwd x up cross product for correct right-positive convention
+- IMUData: compensated fields moved to separate VehicleAccel (saves DRAM)
+
 ## [0.2.0] - 2026-04-17
 
 ### Added

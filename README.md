@@ -29,14 +29,18 @@ See [Hardware Notes](docs/en/hardware-notes.md) for detailed setup and troublesh
 - GNSS tracking at 1 Hz (position, speed, altitude, heading, satellites)
 - IMU sampling at 10 Hz (accelerometer + gyroscope + magnetometer)
 - Barometric pressure and temperature at 1 Hz
+- **Automatic gravity compensation** — mount at any angle, calibrates on startup
+  - 3-second static calibration at boot (vehicle must be stationary)
+  - Complementary filter for continuous gravity tracking
+  - Outputs vehicle-frame G: forward, lateral, vertical (gravity-free)
 - In-memory ring buffer (120 seconds of data)
 - Wi-Fi auto-connect with exponential backoff retry
 - Batch data transmission with re-queue on failure
 - Runtime configuration via TF card JSON file
 - **3-page LCD display** switchable with buttons:
-  - **BtnA — Dashboard:** all sensors overview + satellite skyplot
-  - **BtnB — Motion:** accel XY radar chart with peak hold + gyro bar graphs
-  - **BtnC — Trend:** 120-second time-series graphs (accel, gyro, pressure)
+  - **BtnA — Dashboard:** all sensors overview + satellite skyplot + vehicle G
+  - **BtnB — Motion:** vehicle G radar chart with peak hold + gyro bar graphs
+  - **BtnC — Trend:** 120-second time-series graphs (vehicle G, gyro, pressure)
 - GSV sentence parser for satellite sky view (all constellations)
 - Fully interface-based sensor/network modules for easy swapping
 

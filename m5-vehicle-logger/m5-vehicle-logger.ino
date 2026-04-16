@@ -40,6 +40,7 @@ SensorRecord currentRecord;
 GPSData lastGPSData;
 EnvData lastEnvData;
 IMUData lastIMUData;
+VehicleAccel lastVehicle = {0, 0, 0, false};
 unsigned long lastGPSMs = 0;
 unsigned long lastIMUMs = 0;
 unsigned long lastSendMs = 0;
@@ -153,6 +154,10 @@ void loop() {
         currentRecord.imuCount = imuSampleIndex;
         display.stats.imuReadCount++;
         lastIMUData = imuData;
+        // Get gravity-compensated values (only available from GNSSIMUProvider)
+        if (!rtConfig.useMockIMU) {
+          lastVehicle = static_cast<GNSSIMUProvider*>(imu)->vehicleAccel();
+        }
       }
     }
   }
@@ -189,6 +194,7 @@ void loop() {
     tp.ax = lastIMUData.ax;  tp.ay = lastIMUData.ay;  tp.az = lastIMUData.az;
     tp.gx = lastIMUData.gx;  tp.gy = lastIMUData.gy;  tp.gz = lastIMUData.gz;
     tp.mx = lastIMUData.mx;  tp.my = lastIMUData.my;  tp.mz = lastIMUData.mz;
+    tp.vFwd = lastVehicle.fwd;  tp.vLat = lastVehicle.lat;  tp.vVert = lastVehicle.vert;
     tp.pressure = envData.pressure;
     tp.temperature = envData.temperature;
     trendBuffer.push(tp);
@@ -219,8 +225,8 @@ void loop() {
   }
 
   // --- Display update ---
-  display.update(lastGPSData, gps->satellites(), lastIMUData, lastEnvData,
-                 dataBuffer, network, trendBuffer);
+  display.update(lastGPSData, gps->satellites(), lastIMUData, lastVehicle,
+                 lastEnvData, dataBuffer, network, trendBuffer);
 
   delay(1);
 }

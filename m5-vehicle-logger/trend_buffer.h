@@ -7,9 +7,10 @@
 
 // One snapshot per second for trend display
 struct TrendPoint {
-  float ax, ay, az;       // accelerometer (g)
+  float ax, ay, az;       // accelerometer raw (g)
   float gx, gy, gz;       // gyroscope (deg/s)
   float mx, my, mz;       // magnetometer (uT)
+  float vFwd, vLat, vVert; // gravity-compensated vehicle G
   float pressure;          // hPa
   float temperature;       // C
 };

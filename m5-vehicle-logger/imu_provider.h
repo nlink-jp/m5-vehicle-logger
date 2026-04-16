@@ -5,6 +5,7 @@
 #include <Wire.h>
 #include "types.h"
 #include "config.h"
+#include "gravity_compensator.h"
 
 // --- IMU Interface ---
 class IMUProvider {
@@ -116,12 +117,26 @@ public:
     }
 
     out.offsetMs = 0;  // caller sets this
+
+    // Gravity compensation: update internal state
+    float f, l, v;
+    _lastCompensated = _grav.update(out.ax, out.ay, out.az, f, l, v);
+    _lastVehicle = {f, l, v, _lastCompensated};
+
     return true;
   }
+
+  // Get latest gravity-compensated values (for display, not stored in buffer)
+  const VehicleAccel& vehicleAccel() const { return _lastVehicle; }
+  bool isCalibrated() const { return _grav.isCalibrated(); }
+  float getTiltDeg() const { return _grav.getTiltDeg(); }
 
 private:
   bool _imuOk = false;
   bool _magOk = false;
+  bool _lastCompensated = false;
+  VehicleAccel _lastVehicle = {0, 0, 0, false};
+  GravityCompensator _grav;
 
   // Write a single register on BMI270
   bool writeReg(uint8_t reg, uint8_t val) {

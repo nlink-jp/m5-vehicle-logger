@@ -52,9 +52,9 @@ public:
   int page() const { return _page; }
 
   void update(const GPSData& gps, const SatData& satData,
-              const IMUData& imuData, const EnvData& envData,
-              const DataBuffer& buffer, const WifiManager& network,
-              const TrendBuffer& trend) {
+              const IMUData& imuData, const VehicleAccel& vehicle,
+              const EnvData& envData, const DataBuffer& buffer,
+              const WifiManager& network, const TrendBuffer& trend) {
     unsigned long now = millis();
     if (now - _lastUpdateMs < DISPLAY_UPDATE_INTERVAL_MS) return;
     _lastUpdateMs = now;
@@ -69,10 +69,10 @@ public:
 
     switch (_page) {
       case PAGE_DASHBOARD:
-        _drawDashboard(gps, satData, imuData, envData, buffer, network);
+        _drawDashboard(gps, satData, imuData, vehicle, envData, buffer, network);
         break;
       case PAGE_MOTION:
-        _drawMotion(imuData);
+        _drawMotion(imuData, vehicle);
         break;
       case PAGE_TREND:
         _drawTrend(trend);
@@ -156,8 +156,9 @@ private:
   // ========== Page 0: Dashboard ==========
 
   void _drawDashboard(const GPSData& gps, const SatData& satData,
-                      const IMUData& imuData, const EnvData& envData,
-                      const DataBuffer& buffer, const WifiManager& network) {
+                      const IMUData& imuData, const VehicleAccel& vehicle,
+                      const EnvData& envData, const DataBuffer& buffer,
+                      const WifiManager& network) {
     char line[54];
     int y;
 
@@ -231,8 +232,20 @@ private:
              imuData.mx, imuData.my, imuData.mz, stats.lastIMUSamples);
     M5.Display.print(line);
 
+    y += 10;
+    M5.Display.setCursor(20, y);
+    if (vehicle.compensated) {
+      M5.Display.setTextColor(GREEN, BLACK);
+      snprintf(line, sizeof(line), "V F%+.2f L%+.2f U%+.2f g         ",
+               vehicle.fwd, vehicle.lat, vehicle.vert);
+    } else {
+      M5.Display.setTextColor(YELLOW, BLACK);
+      snprintf(line, sizeof(line), "V calibrating...                 ");
+    }
+    M5.Display.print(line);
+
     // --- ENV ---
-    y = 128;
+    y = 138;
     _sectionLabel(y, "ENV");
     y += 12;
     _drawDot(y, envData.valid ? GREEN : DARKGREY);
@@ -247,7 +260,7 @@ private:
     M5.Display.print(line);
 
     // --- NET ---
-    y = 154;
+    y = 164;
     _sectionLabel(y, "NET");
     y += 12;
     _drawDot(y, network.isConnected() ? GREEN : RED);
@@ -270,7 +283,7 @@ private:
     M5.Display.print(line);
 
     // --- BUF ---
-    y = 196;
+    y = 200;
     _sectionLabel(y, "BUF");
     y += 10;
     M5.Display.setTextSize(1);
@@ -297,7 +310,7 @@ private:
 
   // ========== Page 1: Motion ==========
 
-  void _drawMotion(const IMUData& imu) {
+  void _drawMotion(const IMUData& imu, const VehicleAccel& vehicle) {
     // --- Accel XY radar chart with peak hold ---
     const int cx = 100, cy = 118, cr = 78;
     const float accelScale = 2.0f;  // +-2G maps to full radius
@@ -308,13 +321,22 @@ private:
       _peakInited = true;
     }
 
-    // Update peak: calculate angle and magnitude from accel XY
-    float gXY = sqrt(imu.ax * imu.ax + imu.ay * imu.ay);
+    // Use gravity-compensated vehicle frame if available, else raw XY
+    float plotX, plotY;
+    if (vehicle.compensated) {
+      plotX = vehicle.lat;   // lateral = left/right
+      plotY = vehicle.fwd;   // forward = up on screen
+    } else {
+      plotX = imu.ax;
+      plotY = imu.ay;
+    }
+
+    // Update peak: calculate angle and magnitude
+    float gXY = sqrt(plotX * plotX + plotY * plotY);
     if (gXY > _peakMaxG) _peakMaxG = gXY;
 
     if (gXY > 0.01f) {
-      // atan2 returns -PI..PI, convert to 0..360
-      float angleDeg = atan2(imu.ax, imu.ay) * 180.0f / PI;  // ax=X(right), ay=Y(up)
+      float angleDeg = atan2(plotX, plotY) * 180.0f / PI;
       if (angleDeg < 0) angleDeg += 360.0f;
       int bin = ((int)(angleDeg / (360.0f / PEAK_BINS))) % PEAK_BINS;
       if (gXY > _peakG[bin]) _peakG[bin] = gXY;
@@ -410,9 +432,9 @@ private:
       M5.Display.drawLine(prevRx, prevRy, firstRx, firstRy, YELLOW);
     }
 
-    // Current position dot
-    int px = cx + (int)(imu.ax / accelScale * cr);
-    int py = cy - (int)(imu.ay / accelScale * cr);
+    // Current position dot (using compensated values)
+    int px = cx + (int)(plotX / accelScale * cr);
+    int py = cy - (int)(plotY / accelScale * cr);
     px = constrain(px, cx - cr + 3, cx + cr - 3);
     py = constrain(py, cy - cr + 3, cy + cr - 3);
     M5.Display.fillCircle(px, py, 3, GREEN);
@@ -420,14 +442,18 @@ private:
     // Labels
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(WHITE, BLACK);
-    char line[40];
+    char line[44];
 
     M5.Display.setCursor(cx - cr, 26);
-    snprintf(line, sizeof(line), "Accel XY (+-%.0fG)  ", accelScale);
+    if (vehicle.compensated) {
+      snprintf(line, sizeof(line), "Vehicle G (+-%.0fG)  ", accelScale);
+    } else {
+      snprintf(line, sizeof(line), "Accel XY (+-%.0fG) CAL..", accelScale);
+    }
     M5.Display.print(line);
 
     M5.Display.setCursor(cx - cr, cy + cr + 4);
-    snprintf(line, sizeof(line), "Az:%+.2fg  Peak:%.2fG ", imu.az, _peakMaxG);
+    snprintf(line, sizeof(line), "Vrt:%+.2fg Peak:%.2fG ", vehicle.vert, _peakMaxG);
     M5.Display.print(line);
 
     // --- Gyro 3-axis bar graph ---
@@ -507,9 +533,9 @@ private:
 
     int n = trend.count();
 
-    // --- Graph 1: Accelerometer ---
-    _drawTrendGraph(trend, gy[0], gh, gw, "Accel(g)",
-                    &TrendPoint::ax, &TrendPoint::ay, &TrendPoint::az,
+    // --- Graph 1: Vehicle G (gravity-compensated) ---
+    _drawTrendGraph(trend, gy[0], gh, gw, "Veh G(Fwd/Lat/Vrt)",
+                    &TrendPoint::vFwd, &TrendPoint::vLat, &TrendPoint::vVert,
                     RED, GREEN, 0x041F);
 
     // --- Graph 2: Gyroscope ---

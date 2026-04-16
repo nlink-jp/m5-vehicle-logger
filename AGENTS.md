@@ -24,6 +24,7 @@ m5-vehicle-logger/
 │   ├── config_manager.h       ← TF card JSON config reader
 │   ├── gps_provider.h         ← GPS interface + TinyGPS++ + GSV parser
 │   ├── imu_provider.h         ← IMU/ENV interfaces + BMI270/BMM150/BMP280
+│   ├── gravity_compensator.h  ← gravity removal + vehicle coordinate transform
 │   ├── data_buffer.h          ← ring buffer for network send
 │   ├── trend_buffer.h         ← ring buffer for trend graphs
 │   ├── network_manager.h      ← Wi-Fi + data sender
@@ -48,17 +49,28 @@ Runtime config read from TF card `/config.json`. Fields:
 
 ## Display pages
 
-- **BtnA — Dashboard:** GPS + skyplot + IMU 9-axis + ENV + network + buffer
-- **BtnB — Motion:** accel XY radar chart (peak hold, spline smoothed) + gyro bars
-- **BtnC — Trend:** 120s time-series (accel, gyro, pressure)
+- **BtnA — Dashboard:** GPS + skyplot + IMU 9-axis + vehicle G + ENV + network + buffer
+- **BtnB — Motion:** vehicle G radar chart (peak hold, spline smoothed) + gyro bars
+- **BtnC — Trend:** 120s time-series (vehicle G, gyro, pressure)
+
+## Gravity compensation
+
+- GravityCompensator calibrates at startup (3s static average, vehicle must be stationary)
+- Forward axis = sensor Z (display normal) projected to horizontal plane
+- Lateral axis = forward × up (positive = right)
+- Complementary filter (alpha=0.995 at 10Hz, ~20s time constant) tracks gravity continuously
+- VehicleAccel is display-only — not stored in SensorRecord buffer (saves DRAM)
 
 ## Gotchas
 
 - **M5Module-GNSS library is DISABLED** — its Bosch BMI270 API conflicts with M5Unified's
   internal IMU driver, causing M5.begin() to hang. Renamed to .disabled in Arduino libraries.
 - **Do NOT call Wire.begin() after M5.begin()** — ESP32 Core v3.x blocks on double-init
+- **Startup calibration requires static vehicle** — first 3 seconds after boot
+- **RTTI is disabled** — use static_cast with config flag guard, not dynamic_cast
 - BMM150 is on BMI270's secondary I2C — invisible to host I2C scan
 - BMI270 detected by M5Unified as type=6; must call M5.Imu.update() before getImuData()
+- DRAM is tight (~160KB): VehicleAccel separated from IMUData to avoid 120*10 multiplication
 - No PSRAM: cannot use full-screen Sprite; direct draw with background color overwrite
 - No battery: TF card writes risk data loss on power cut, hence memory buffer + Wi-Fi
 - ESP32 watchdog: main loop must yield (delay(1)) to prevent reset
