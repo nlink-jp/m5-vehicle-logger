@@ -22,7 +22,7 @@ public:
     // Set defaults
     memset(&cfg, 0, sizeof(cfg));
     cfg.useMockGPS = false;
-    cfg.useMockIMU = true;     // IMU not yet available
+    cfg.useMockIMU = false;    // BMI270+BMM150+BMP280 on GNSS Module M135
     cfg.useMockSender = true;  // cloud not yet ready
     strncpy(cfg.endpoint, "http://example.com/api/data", sizeof(cfg.endpoint) - 1);
     cfg.apiKey[0] = '\0';

@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-04-17
+
+### Added
+
+- GNSS Module M135 support (NEO-M9N + BMI270 + BMM150 + BMP280)
+- BMI270 IMU via M5Unified built-in driver (accelerometer + gyroscope)
+- BMM150 magnetometer via BMI270 auxiliary I2C passthrough
+- BMP280 barometric pressure and temperature via Adafruit_BMP280
+- EnvProvider interface and BMP280EnvProvider / MockEnvProvider implementations
+- 3-page display switchable with BtnA/BtnB/BtnC
+- Dashboard page: satellite skyplot with SNR color coding
+- Motion page: accel XY radar chart with per-direction peak hold
+- Motion page: Catmull-Rom spline + Gaussian smoothing for radar outline
+- Motion page: gyroscope 3-axis bar graphs
+- Trend page: 120-second time-series graphs (accel, gyro, pressure)
+- TrendBuffer ring buffer for graph history
+- GSV sentence parser for satellite position data (all constellations)
+- SatInfo / SatData structures for satellite tracking
+- EnvData structure for temperature/pressure/altitude
+- Magnetometer fields (mx, my, mz) in IMUData
+- I2C bus scanner diagnostic on startup
+- Serial re-initialization after M5.begin() for reliable debug output
+
+### Changed
+
+- GPS baud rate: 115200 (AT6668) -> 38400 (NEO-M9N)
+- IMU default: mock -> real (BMI270 on GNSS Module)
+- GPS provider comment updated for NEO-M9N compatibility
+- MockSender now logs temperature and pressure
+- config.example.json: mock.imu default changed to false
+
+### Removed
+
+- M5Module-GNSS library dependency (symbol conflict with M5Unified on ESP32 Core v3.x)
+- TinyGPSCustom-based satellite count (replaced by GSV parser)
+
 ## [0.1.0] - 2026-04-14
 
 ### Added

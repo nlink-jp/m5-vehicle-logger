@@ -7,7 +7,7 @@
   "api_key": "your-api-key-here",
   "mock": {
     "gps": false,
-    "imu": true,
+    "imu": false,
     "sender": true
   }
 }

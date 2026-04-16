@@ -4,22 +4,166 @@
 #include "types.h"
 #include "config.h"
 
+// --- Satellite info for skyplot ---
+#define MAX_SATS 40
+
+struct SatInfo {
+  uint8_t prn;        // satellite PRN number
+  uint8_t elevation;  // degrees (0-90)
+  uint16_t azimuth;   // degrees (0-359)
+  uint8_t snr;        // signal-to-noise (dB-Hz), 0 = not tracking
+};
+
+struct SatData {
+  SatInfo sats[MAX_SATS];
+  uint8_t count;
+};
+
 // --- Interface ---
 class GPSProvider {
 public:
   virtual ~GPSProvider() {}
   virtual void begin() = 0;
-  virtual void update() = 0;     // call frequently to feed parser
-  virtual bool read(GPSData& out) = 0;  // true if new fix available
+  virtual void update() = 0;
+  virtual bool read(GPSData& out) = 0;
+  virtual const SatData& satellites() const = 0;
 };
 
-// --- TinyGPS++ implementation for AT6668 (M5 GPS Module v2.1) ---
+// --- GSV sentence parser (manual NMEA parsing) ---
+// Parses $GxGSV sentences to extract satellite positions.
+// Works with all constellations: GP(GPS), GL(GLONASS), GA(Galileo), BD/GB(BeiDou)
+class GSVParser {
+public:
+  // Feed one character at a time. Call from the main NMEA stream.
+  void feed(char c) {
+    if (c == '$') {
+      _pos = 0;
+      _buf[_pos++] = c;
+      return;
+    }
+    if (_pos == 0) return;  // waiting for $
+
+    if (c == '\r' || c == '\n') {
+      if (_pos > 10) {
+        _buf[_pos] = '\0';
+        _parseLine();
+      }
+      _pos = 0;
+      return;
+    }
+
+    if (_pos < (int)sizeof(_buf) - 1) {
+      _buf[_pos++] = c;
+    } else {
+      _pos = 0;  // overflow
+    }
+  }
+
+  const SatData& data() const { return _committed; }
+
+private:
+  char _buf[100];
+  int _pos = 0;
+
+  // Double-buffer: build into _working, commit to _committed when last GSV msg
+  SatData _working;
+  SatData _committed;
+  bool _newSequence = true;
+
+  void _parseLine() {
+    // Check it's a GSV sentence: $xxGSV
+    if (_buf[0] != '$') return;
+    if (_buf[3] != 'G' || _buf[4] != 'S' || _buf[5] != 'V') return;
+
+    // Verify checksum
+    if (!_verifyChecksum()) return;
+
+    // Parse fields (comma-separated)
+    // $xxGSV,totalMsgs,msgNum,totalSats[,prn,elev,azim,snr]*checksum
+    char* fields[24];
+    int nf = _split(fields, 24);
+    if (nf < 4) return;
+
+    int totalMsgs = atoi(fields[1]);
+    int msgNum = atoi(fields[2]);
+    // int totalSats = atoi(fields[3]);  // not used directly
+
+    // First message of a new constellation sequence
+    if (msgNum == 1 && _newSequence) {
+      _working.count = 0;
+      _newSequence = false;
+    }
+
+    // Parse satellite blocks (4 fields each, starting at field 4)
+    for (int i = 4; i + 3 < nf && _working.count < MAX_SATS; i += 4) {
+      if (strlen(fields[i]) == 0) continue;  // empty PRN = padding
+      SatInfo& s = _working.sats[_working.count];
+      s.prn = atoi(fields[i]);
+      s.elevation = atoi(fields[i + 1]);
+      s.azimuth = atoi(fields[i + 2]);
+      s.snr = (strlen(fields[i + 3]) > 0) ? atoi(fields[i + 3]) : 0;
+      _working.count++;
+    }
+
+    // Last message of this constellation — check if this is the final one
+    if (msgNum == totalMsgs) {
+      // Commit: copy working to committed
+      // For multi-constellation, we accumulate across GP/GL/GA/BD sequences
+      // Commit after a brief period (handled by checking if msgNum==totalMsgs
+      // for the last constellation we see)
+      _committed = _working;
+      _newSequence = true;  // next GSV starts fresh
+    }
+  }
+
+  bool _verifyChecksum() {
+    // Find * and compute XOR checksum
+    char* star = strchr(_buf, '*');
+    if (!star || (star - _buf) < 2) return false;
+
+    uint8_t calc = 0;
+    for (char* p = _buf + 1; p < star; p++) {
+      calc ^= *p;
+    }
+
+    uint8_t expect = (uint8_t)strtol(star + 1, NULL, 16);
+    return (calc == expect);
+  }
+
+  int _split(char** fields, int maxFields) {
+    int count = 0;
+    // Skip $ and start from first field
+    char* p = _buf + 1;  // skip $
+    // Find first comma (skip sentence ID)
+    // Actually, split all fields including sentence ID
+    p = _buf;
+    while (*p == '$') p++;  // skip $
+
+    // Split by comma, also stop at *
+    fields[count++] = p;
+    while (*p && *p != '*' && count < maxFields) {
+      if (*p == ',') {
+        *p = '\0';
+        fields[count++] = p + 1;
+      }
+      p++;
+    }
+    if (*p == '*') *p = '\0';
+
+    return count;
+  }
+};
+
+// --- TinyGPS++ implementation for NEO-M9N (GNSS Module M135) ---
+// Also compatible with AT6668 (GPS Module v2.1) — just change GPS_BAUD
 #include <TinyGPS++.h>
 
 class TinyGPSProvider : public GPSProvider {
 public:
   TinyGPSProvider(HardwareSerial& serial, int txPin, int rxPin, unsigned long baud)
-    : _serial(serial), _txPin(txPin), _rxPin(rxPin), _baud(baud) {}
+    : _serial(serial), _txPin(txPin), _rxPin(rxPin), _baud(baud) {
+    _satData.count = 0;
+  }
 
   void begin() override {
     _serial.end();
@@ -41,24 +185,25 @@ public:
       }
     }
     Serial.printf("[GPS] NMEA: %s\n", ok ? "OK" : "not detected");
-    // Flush remaining
     while (_serial.available()) _serial.read();
   }
 
   void update() override {
     while (_serial.available() > 0) {
-      _gps.encode(_serial.read());
+      char c = _serial.read();
+      _gps.encode(c);
+      _gsv.feed(c);  // also feed GSV parser
     }
 
-    // Periodic diagnostic (every 5 seconds)
+    // Periodic diagnostic
     unsigned long now = millis();
     if (now - _lastDiagMs >= 5000) {
       _lastDiagMs = now;
-      Serial.printf("[GPS] chars=%lu ok=%lu fail=%lu fixSat=%d inView=%d fix=%d\n",
+      Serial.printf("[GPS] chars=%lu ok=%lu fail=%lu fixSat=%d sats=%d fix=%d\n",
                     _gps.charsProcessed(), _gps.sentencesWithFix(),
                     _gps.failedChecksum(),
                     _gps.satellites.isValid() ? _gps.satellites.value() : -1,
-                    satellitesInView(),
+                    _gsv.data().count,
                     _gps.location.isValid() ? 1 : 0);
     }
   }
@@ -66,10 +211,8 @@ public:
   bool read(GPSData& out) override {
     update();
 
-    // Show satellites: fix count from GGA, or in-view count from GSV
     uint8_t fixSats = _gps.satellites.isValid() ? _gps.satellites.value() : 0;
-    uint8_t inView = satellitesInView();
-    // Prefer in-view during acquisition (shows progress), fix count when locked
+    uint8_t inView = _gsv.data().count;
     out.satellites = fixSats > 0 ? fixSats : inView;
     out.valid = _gps.location.isValid();
     out.latitude = _gps.location.isValid() ? _gps.location.lat() : 0.0;
@@ -87,35 +230,38 @@ public:
       snprintf(out.timestamp, sizeof(out.timestamp), "0000-00-00T00:00:00Z");
     }
 
-    // Return true if any NMEA data was processed (not just on fix)
+    _satData = _gsv.data();
     return _gps.charsProcessed() > 0;
   }
 
-  uint8_t satellitesInView() {
-    const char* gp = _satInView.value();
-    const char* gn = _satInViewGN.value();
-    int v = atoi(gp);
-    int v2 = atoi(gn);
-    return (uint8_t)(v > v2 ? v : v2);
-  }
+  const SatData& satellites() const override { return _satData; }
 
 private:
   HardwareSerial& _serial;
   int _txPin, _rxPin;
   unsigned long _baud;
   TinyGPSPlus _gps;
-  // Custom: GPGSV sentence, field 3 = total satellites in view
-  TinyGPSCustom _satInView{_gps, "GPGSV", 3};
-  // Also try GNGSV (multi-constellation)
-  TinyGPSCustom _satInViewGN{_gps, "GNGSV", 3};
+  GSVParser _gsv;
+  SatData _satData;
   unsigned long _lastDiagMs = 0;
 };
 
 // --- Mock implementation ---
 class MockGPSProvider : public GPSProvider {
 public:
+  MockGPSProvider() { _satData.count = 0; }
+
   void begin() override {
     Serial.println("[MockGPS] initialized");
+    // Create some fake satellites for skyplot testing
+    _satData.count = 6;
+    uint8_t prns[]  = {1,  3,  7, 14, 20, 28};
+    uint8_t elevs[] = {45, 70, 20, 55, 10, 80};
+    uint16_t azs[]  = {30, 120, 210, 300, 75, 350};
+    uint8_t snrs[]  = {42, 35, 28, 40, 15, 38};
+    for (int i = 0; i < 6; i++) {
+      _satData.sats[i] = {prns[i], elevs[i], azs[i], snrs[i]};
+    }
   }
 
   void update() override {}
@@ -136,4 +282,9 @@ public:
              (now / 3600000) % 24, (now / 60000) % 60, (now / 1000) % 60);
     return true;
   }
+
+  const SatData& satellites() const override { return _satData; }
+
+private:
+  SatData _satData;
 };

@@ -25,9 +25,10 @@ public:
                   _endpoint, strlen(_apiKey) > 0 ? "***" : "none", count);
     for (int i = 0; i < count; i++) {
       const SensorRecord& r = records[i];
-      Serial.printf("  [%s] lat=%.6f lng=%.6f spd=%.1f sat=%d imu_n=%d\n",
+      Serial.printf("  [%s] lat=%.6f lng=%.6f spd=%.1f sat=%d imu_n=%d %.1fC %.1fhPa\n",
                      r.gps.timestamp, r.gps.latitude, r.gps.longitude,
-                     r.gps.speed, r.gps.satellites, r.imuCount);
+                     r.gps.speed, r.gps.satellites, r.imuCount,
+                     r.env.temperature, r.env.pressure);
     }
     return true;
   }
